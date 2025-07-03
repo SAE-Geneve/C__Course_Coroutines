@@ -1,6 +1,7 @@
-cmake_minimum_required(VERSION 3.31)
+﻿cmake_minimum_required(VERSION 3.31)
 project(C__Course_Coroutines)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(C__Course_Coroutines main.cpp)
+add_executable(SimpleWait simple_wait/main.cc)
+add_executable(Tesks tasks/main.cc)
