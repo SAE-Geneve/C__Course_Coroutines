@@ -1,6 +1,12 @@
-﻿#include <coroutine>
+﻿#include <algorithm>
+#include <array>
+#include <coroutine>
 #include <iostream>
+#include <random>
 #include <vector>
+
+constexpr int NUM_WORKERS = 3;
+std::array<int, NUM_WORKERS> results;
 
 // Simple task for coroutines
 struct Task {
@@ -8,62 +14,73 @@ struct Task {
         Task get_return_object(){
             return Task{std::coroutine_handle<promise_type>::from_promise(*this)};
         };
-        std::suspend_never initial_suspend(){ return {}; }
-        std::suspend_never final_suspend() noexcept{ return {}; }
-        void return_void(){}
-        void unhandled_exception(){}
-    };
+        std::suspend_always initial_suspend(){ return {}; }
+        std::suspend_always final_suspend() noexcept{ return {}; }
 
-    std::suspend_never yield_value(){
-        return std::suspend_never{};
-    }
+        void return_void(){
+        }
+
+        void unhandled_exception(){
+        }
+    };
 
     explicit Task(std::coroutine_handle<promise_type> h) : handle(h){
     }
 
+    // Destrutor
+    ~Task(){
+        handle.destroy();
+    }
+
     std::coroutine_handle<promise_type> handle;
-
-    bool is_done = false;
-
 };
 
 
-std::vector<int> results;
-
 // Coroutine that increments counter
-Task increment_counter(int times, int id){
-    for (int i = 0; i < times; ++i) {
-        results[id]++;
-        std::cout << "Worker " << id << ": " << results[id] << std::endl;
+Task increment_counter(int times, int idx, int &counter){
+    for (int counter_loop = 0; counter_loop < times; ++counter_loop) {
+        counter++;
+        std::cout << "Worker " << idx << " : " << counter << "/" << times << std::endl;
         co_await std::suspend_always{};
     }
+    std::cout << "Worker " << idx << " done" << std::endl;
     co_return;
 }
 
 int main(){
+    std::random_device rd;  // Obtient une source d'entropie matérielle
+    std::mt19937 gen(rd()); // Initialise le générateur de nombres aléatoires
+    std::uniform_int_distribution<> dis(1, 10); // Distribution uniforme entre 1 et 10
+    
     std::cout << "Starting parallel counter...\n";
 
-    std::vector<Task> tasks_;
+    std::array tasks_ = {
+        increment_counter(dis(gen), 0, results[0]),
+        increment_counter(dis(gen), 1, results[1]),
+        increment_counter(dis(gen), 2, results[2]),
+    };
 
-    for (int i = 0; i < 3; ++i) {
-        results.emplace_back(0);
-        auto co_rtine = increment_counter(10, i);
-        tasks_.emplace_back(co_rtine);
-    }
-
-    bool all_is_done = true;
-
+    bool all_is_done;
     do {
-        for (auto &task: tasks_) {
-            task.handle.resume();
-            all_is_done &= task.is_done;
+        all_is_done = true;
+
+        for (int i = 0; i < NUM_WORKERS; ++i) {
+
+            if (!tasks_[i].handle.done()) {
+                tasks_[i].handle.resume();
+            }else {
+                std::cout << "Task [" << i << "] done " << std::endl;
+            }
+
+            all_is_done &= tasks_[i].handle.done();
+
         }
 
-        std::cout << "Doing something else" << std::endl;
-
+        std::cout << "Doing something else (All is done ?) : " << (all_is_done ? "True" : "False") << std::endl;
     } while (!all_is_done);
 
     std::cout << "All task done !" << std::endl;
 
     return 0;
+
 }
